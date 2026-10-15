@@ -1,9 +1,11 @@
 /* SERVER CODE: index.js */
 // import dependencies
-import express from "express";
-import cors from "cors";
-const app = express();
-app.use(cors());
+// import express from "express";
+var express = require("express");
+var cors = require("cors"); 
+var app = express();
+
+app.use(cors()); 
 
 app.use(function (request, response) {
     console.log("In comes a request to: " + request.url);
