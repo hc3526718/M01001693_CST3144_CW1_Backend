@@ -7,8 +7,9 @@ var app = express();
 
 app.use(cors()); 
 
-app.use(function (request, response) {
+app.use(function (request, response, next) {
     console.log("In comes a request to: " + request.url);
+    next();
 });
 
 const lessons = [
@@ -108,8 +109,8 @@ app.get("/lessons", function (request, response) {
     response.json(lessons);
 });
 
-app.listen(5500, function () {
-    console.log("App started on port 5500");
+app.listen(3000, function () {
+    console.log("App started on port 3000");
 });
 
 
