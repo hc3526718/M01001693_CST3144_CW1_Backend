@@ -4,11 +4,23 @@
 var express = require("express");
 var cors = require("cors"); 
 var app = express();
+var path = require("path");
 
 app.use(cors()); 
 
+app.use(express.json());
+
+// Serve lesson images from the frontend images folder
+app.use("/images",express.static(path.join(__dirname, "..", "backend", "images")));
+
+// Return an error if the requested image does not exist
+app.use("/images", function(request, response, next) {
+    response.status(404).send("Error: Lesson image not found.");
+    next();
+});
+
 app.use(function (request, response, next) {
-    console.log("In comes a request to: " + request.url);
+    console.log("Incoming " + request.method + " request to: " + request.url);
     next();
 });
 
@@ -107,6 +119,24 @@ const lessons = [
 
 app.get("/lessons", function (request, response) {
     response.json(lessons);
+});
+
+app.post("/order", function(request, response) { 
+    const order = request.body;
+    console.log("New order received:");
+    console.log("Name: " + order.name);
+    console.log("Phone: " + order.phone);
+    console.log("Address: " + order.address);
+    console.log("Lesson IDs: " + order.lessonIds.join(", "));
+
+    response.status(200).json({
+        message: "Order received successfully"
+    });
+});
+
+app.use(function(request, response) {
+    response.status(404).send("Page not found!");
+    console.log("Error 404: Page not found!");
 });
 
 app.listen(3000, function () {
