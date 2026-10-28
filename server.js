@@ -10,17 +10,21 @@ app.use(cors());
 
 app.use(express.json());
 
+app.get("/", function(request, response) {
+    response.send("Welcome to the CourseApp backend server!");
+});
+
 // Serve lesson images from the frontend images folder
 app.use("/images",express.static(path.join(__dirname, "..", "backend", "images")));
+
+app.use(function (request, response, next) {
+    console.log("Incoming " + request.method + " request to: " + request.url);
+    next();
+});
 
 // Return an error if the requested image does not exist
 app.use("/images", function(request, response, next) {
     response.status(404).send("Error: Lesson image not found.");
-    next();
-});
-
-app.use(function (request, response, next) {
-    console.log("Incoming " + request.method + " request to: " + request.url);
     next();
 });
 
@@ -142,5 +146,4 @@ app.use(function(request, response) {
 app.listen(3000, function () {
     console.log("App started on port 3000");
 });
-
 
