@@ -2,20 +2,31 @@
 // import dependencies
 // import express from "express";
 var express = require("express");
-var cors = require("cors"); 
+var cors = require("cors");
 var app = express();
 var path = require("path");
+const { MongoClient } = require("mongodb");
+const dotenv = require("dotenv");
 
-app.use(cors()); 
+dotenv.config({ path: "./.env" });
+
+const MONGODB_URI = process.env.MONGODB_URI;
+const PORT = process.env.PORT || 3000;
+
+const client = new MongoClient(MONGODB_URI);
+const db = client.db("lessonDB");
+
+
+app.use(cors());
 
 app.use(express.json());
 
-app.get("/", function(request, response) {
+app.get("/", function (request, response) {
     response.send("Welcome to the CourseApp backend server!");
 });
 
 // Serve lesson images from the frontend images folder
-app.use("/images",express.static(path.join(__dirname, "..", "backend", "images")));
+app.use("/images", express.static(path.join(__dirname, "images")));
 
 app.use(function (request, response, next) {
     console.log("Incoming " + request.method + " request to: " + request.url);
@@ -23,9 +34,8 @@ app.use(function (request, response, next) {
 });
 
 // Return an error if the requested image does not exist
-app.use("/images", function(request, response, next) {
+app.use("/images", function (request, response, next) {
     response.status(404).send("Error: Lesson image not found.");
-    next();
 });
 
 const lessons = [
@@ -121,29 +131,109 @@ const lessons = [
     }
 ]
 
-app.get("/lessons", function (request, response) {
-    response.json(lessons);
+app.get("/lessons", async function (request, response) {
+    try {
+        const lessonsCollection = db.collection("lessons");
+
+        const lessons = await lessonsCollection.find({}).toArray();
+
+        console.log("Lessons retrieved:", lessons.length);
+
+        response.status(200).json(lessons);
+
+    } catch (error) {
+        console.error("Error retrieving lessons from MongoDB:", error);
+
+        response.status(500).json({
+            error: "Failed to retrieve lessons"
+        });
+    }
 });
 
-app.post("/order", function(request, response) { 
-    const order = request.body;
-    console.log("New order received:");
-    console.log("Name: " + order.name);
-    console.log("Phone: " + order.phone);
-    console.log("Address: " + order.address);
-    console.log("Lesson IDs: " + order.lessonIds.join(", "));
+app.post("/order", async function (request, response) {
+    try {
+        const order = request.body;
+        if (!order || !order.name || !order.phone || !order.address || !Array.isArray(order.lessonIDs) || order.lessonIDs.length === 0) {
+            return response.status(400).json({ error: "Invalid order" });
+        }
+        console.log("New order received:");
+        console.log("Name: " + order.name);
+        console.log("Phone: " + order.phone);
+        console.log("Address: " + order.address);
+        console.log("Lesson IDs:", JSON.stringify(order.lessonIDs));
+        order.lessonIDs.forEach(function (entry, index) {
+            console.log("[" + index + "] Lesson ID: " + entry[0] + ", Spaces: " + entry[1]);
+        });
 
-    response.status(200).json({
-        message: "Order received successfully"
-    });
+        const result = await db.collection("orders").insertOne({
+            name: order.name,
+            phone: order.phone,
+            address: order.address,
+            lessonIDs: order.lessonIDs,
+            createdAt: new Date()
+        });
+
+        response.status(201).json({
+            message: "Order saved successfully",
+            orderId: result.insertedId
+        });
+    } catch (error) {
+        console.error("Error processing order:", error);
+        response.status(500).json({
+            error: "Failed to process order"
+        });
+    }
 });
 
-app.use(function(request, response) {
+app.put("/lessons/:id", async function (request, response) {
+    try {
+        const lessonId = Number(request.params.id);
+        const quantity = Number(request.body.quantity);
+        if (!Number.isInteger(lessonId) || !Number.isInteger(quantity) || quantity < 1) {
+            return response.status(400).json({ error: "Invalid lesson ID or quantity" });
+        }
+
+        const lessonsCollection = db.collection("lessons");
+        const lesson = await lessonsCollection.findOne({ id: lessonId });
+        if (!lesson) {
+            return response.status(404).json({ error: "Lesson not found" });
+        }
+
+        const field = lesson.space !== undefined ? "space" : "spaces";
+        const result = await lessonsCollection.updateOne(
+            { id: lessonId, [field]: { $gte: quantity } },
+            { $inc: { [field]: -quantity } }
+        );
+        if (result.modifiedCount === 0) {
+            return response.status(409).json({ error: "Not enough spaces available" });
+        }
+
+        console.log("Lesson " + lessonId + " spaces reduced by " + quantity);
+        response.status(200).json({ message: "Lesson spaces updated" });
+    } catch (error) {
+        console.error("Error updating lesson:", error);
+        response.status(500).json({ error: "Failed to update lesson" });
+    }
+});
+
+app.use(function (request, response) {
     response.status(404).send("Page not found!");
     console.log("Error 404: Page not found!");
 });
 
-app.listen(3000, function () {
-    console.log("App started on port 3000");
-});
+async function startServer() {
+    try {
+        await client.connect();
 
+        console.log("Successfully connected to MongoDB!");
+
+        app.listen(PORT, function () {
+            console.log("App started on port " + PORT);
+        });
+
+    } catch (error) {
+        console.error("Unable to connect to MongoDB:", error);
+    }
+}
+
+startServer();
