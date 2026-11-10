@@ -16,7 +16,6 @@ const PORT = process.env.PORT || 3000;
 const client = new MongoClient(MONGODB_URI);
 const db = client.db("lessonDB");
 
-
 app.use(cors());
 
 app.use(express.json());
