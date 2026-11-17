@@ -39,17 +39,30 @@ app.use("/images", function (request, response, next) {
 
 app.get("/lessons", async function (request, response) {
     try {
-        const lessonsCollection = db.collection("lessons");
-
-        const lessons = await lessonsCollection.find({}).toArray();
+        const lessons = await db.collection("lessons").aggregate([
+            {
+                $lookup: {
+                    from: "teachers",
+                    let: { lessonTopic: "$topic" },
+                    pipeline: [
+                        {
+                            $match: {
+                                $expr: {
+                                    $in: ["$$lessonTopic", "$lessons"]
+                                }
+                            }
+                        }
+                    ],
+                    as: "teachers"
+                }
+            }
+        ]).toArray();
 
         console.log("Lessons retrieved:", lessons.length);
-
         response.status(200).json(lessons);
 
     } catch (error) {
-        console.error("Error retrieving lessons from MongoDB:", error);
-
+        console.error("Error retrieving lessons:", error);
         response.status(500).json({
             error: "Failed to retrieve lessons"
         });
