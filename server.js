@@ -208,6 +208,22 @@ app.get("/users/:email", async function (request, response) {
     }
 });
 
+app.get("/teachers", async function (request, response) {
+    try {
+        const teachersCollection = db.collection("teachers");
+        const teachers = await teachersCollection.find({}).toArray();
+
+        console.log("Teachers retrieved:", teachers.length);
+
+        response.status(200).json(teachers);
+    } catch (error) {
+        console.error("Error retrieving teachers from MongoDB:", error);
+        response.status(500).json({
+            error: "Failed to retrieve teachers"
+        });
+    }
+});
+
 app.use(function (request, response) {
     response.status(404).send("Page not found!");
     console.log("Error 404: Page not found!");
