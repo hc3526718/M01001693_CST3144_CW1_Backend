@@ -80,7 +80,7 @@ app.post("/order", async function (request, response) {
         console.log("Phone: " + order.phone);
         console.log("Address: " + order.address);
         const lessonsOrdered = order.lessonIDs.map(function (entry) {
-            return [entry[2], entry[1]];
+            return [entry[0], entry[2], entry[1]];
         });
         console.log("Lessons ordered:", JSON.stringify(lessonsOrdered));
 
@@ -110,7 +110,6 @@ app.put("/lessons/:id", async function (request, response) {
         const lessonFilter = ObjectId.isValid(rawId) && String(new ObjectId(rawId)) === rawId
             ? { _id: new ObjectId(rawId) }
             : { id: Number(rawId) };
-        const lessonId = rawId;
         const quantity = Number(request.body.quantity);
         if (!Number.isInteger(quantity) || quantity < 1) {
             return response.status(400).json({ error: "Invalid lesson ID or quantity" });
