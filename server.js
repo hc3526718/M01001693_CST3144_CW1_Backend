@@ -1,6 +1,3 @@
-/* SERVER CODE: index.js */
-// import dependencies
-// import express from "express";
 var express = require("express");
 var cors = require("cors");
 var app = express();
@@ -39,24 +36,36 @@ app.use("/images", function (request, response, next) {
 
 app.get("/lessons", async function (request, response) {
     try {
-        const lessons = await db.collection("lessons").aggregate([
-            {
-                $lookup: {
-                    from: "teachers",
-                    let: { lessonTopic: "$topic" },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $in: ["$$lessonTopic", "$lessons"]
-                                }
+
+        const search = request.query.search;
+        const pipeline = [];
+
+        if (search) {
+            pipeline.push({
+                $match: {
+                    topic: { $regex: search, $options: "i" }
+                }
+            });
+        }
+
+        pipeline.push({
+            $lookup: {
+                from: "teachers",
+                let: { lessonTopic: "$topic" },
+                pipeline: [
+                    {
+                        $match: {
+                            $expr: {
+                                $in: ["$$lessonTopic", "$lessons"]
                             }
                         }
-                    ],
-                    as: "teachers"
-                }
+                    }
+                ],
+                as: "teachers"
             }
-        ]).toArray();
+        });
+
+        const lessons = await db.collection("lessons").aggregate(pipeline).toArray();
 
         console.log("Lessons retrieved:", lessons.length);
         response.status(200).json(lessons);
@@ -72,6 +81,7 @@ app.get("/lessons", async function (request, response) {
 app.post("/order", async function (request, response) {
     try {
         const order = request.body;
+
         if (!order || !order.name || !order.phone || !order.address || !Array.isArray(order.lessonIDs) || order.lessonIDs.length === 0) {
             return response.status(400).json({ error: "Invalid order" });
         }
@@ -79,8 +89,22 @@ app.post("/order", async function (request, response) {
         console.log("Name: " + order.name);
         console.log("Phone: " + order.phone);
         console.log("Address: " + order.address);
+
+        const validLessons = order.lessonIDs.every(entry =>
+            entry &&
+            ObjectId.isValid(entry.lessonID) &&
+            typeof entry.lessonName === "string" &&
+            entry.lessonName.trim() !== "" &&
+            Number.isInteger(entry.quantity) &&
+            entry.quantity > 0
+        );
+
+        if (!validLessons) {
+            return response.status(400).json({ error: "Invalid lesson data" });
+        }
+
         const lessonsOrdered = order.lessonIDs.map(function (entry) {
-            return [entry[0], entry[2], entry[1]];
+            return [entry.lessonName, entry.quantity];
         });
         console.log("Lessons ordered:", JSON.stringify(lessonsOrdered));
 
@@ -107,30 +131,29 @@ app.post("/order", async function (request, response) {
 app.put("/lessons/:id", async function (request, response) {
     try {
         const rawId = request.params.id;
-        const lessonFilter = ObjectId.isValid(rawId) && String(new ObjectId(rawId)) === rawId
-            ? { _id: new ObjectId(rawId) }
-            : { id: Number(rawId) };
-        const quantity = Number(request.body.quantity);
-        if (!Number.isInteger(quantity) || quantity < 1) {
-            return response.status(400).json({ error: "Invalid lesson ID or quantity" });
+
+        if (!ObjectId.isValid(rawId)) {
+            return response.status(400).json({ error: "Invalid lesson ID" });
         }
 
-        const lessonsCollection = db.collection("lessons");
-        const lesson = await lessonsCollection.findOne(lessonFilter);
-        if (!lesson) {
+        const lessonFilter = { _id: new ObjectId(rawId) };
+        const updateData = request.body;
+
+        if (!updateData || Object.keys(updateData).length === 0) {
+            return response.status(400).json({ error: "No update data provided" });
+        }
+
+        const result = await db.collection("lessons").updateOne(
+            lessonFilter,
+            { $set: updateData }
+        );
+
+        if (result.matchedCount === 0) {
             return response.status(404).json({ error: "Lesson not found" });
         }
 
-        const field = lesson.space !== undefined ? "space" : "spaces";
-        const result = await lessonsCollection.updateOne(
-            { ...lessonFilter, [field]: { $gte: quantity } },
-            { $inc: { [field]: -quantity } }
-        );
-        if (result.modifiedCount === 0) {
-            return response.status(409).json({ error: "Not enough spaces available" });
-        }
+        response.status(200).json({ message: "Lesson updated successfully" });
 
-        response.status(200).json({ message: "Lesson spaces updated" });
     } catch (error) {
         console.error("Error updating lesson:", error);
         response.status(500).json({ error: "Failed to update lesson" });
@@ -172,7 +195,7 @@ app.post("/users", async function (request, response) {
 
 app.get("/users/:email/checkout", async function (request, response) {
     try {
-        const email = decodeURIComponent(request.params.email);
+        const email = request.params.email;
         if (!email) {
             return response.status(400).json({ error: "Invalid email" });
         }
@@ -200,7 +223,7 @@ app.get("/users/:email/checkout", async function (request, response) {
 
 app.get("/users/:email", async function (request, response) {
     try {
-        const email = decodeURIComponent(request.params.email);
+        const email = request.params.email;
         if (!email) {
             return response.status(400).json({ error: "Invalid email" });
         }
