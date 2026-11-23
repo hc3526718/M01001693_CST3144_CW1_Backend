@@ -17,17 +17,17 @@ app.use(cors());
 
 app.use(express.json());
 
+app.use(function (request, response, next) {
+    console.log("Incoming " + request.method + " request to: " + request.url);
+    next();
+});
+
 app.get("/", function (request, response) {
     response.send("Welcome to the CourseApp backend server!");
 });
 
 // Serve lesson images from the frontend images folder
 app.use("/images", express.static(path.join(__dirname, "images")));
-
-app.use(function (request, response, next) {
-    console.log("Incoming " + request.method + " request to: " + request.url);
-    next();
-});
 
 // Return an error if the requested image does not exist
 app.use("/images", function (request, response, next) {
@@ -41,9 +41,15 @@ app.get("/lessons", async function (request, response) {
         const pipeline = [];
 
         if (search) {
+            const pattern = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             pipeline.push({
                 $match: {
-                    topic: { $regex: search, $options: "i" }
+                    $or: [
+                        { topic: { $regex: pattern, $options: "i" } },
+                        { location: { $regex: pattern, $options: "i" } },
+                        { $expr: { $regexMatch: { input: { $toString: "$price" }, regex: pattern, options: "i" } } },
+                        { $expr: { $regexMatch: { input: { $toString: "$spaces" }, regex: pattern, options: "i" } } }
+                    ]
                 }
             });
         }
@@ -69,7 +75,6 @@ app.get("/lessons", async function (request, response) {
 
         console.log("Lessons retrieved:", lessons.length);
         response.status(200).json(lessons);
-        response.send("Lessons retrieved successfully: " + lesson);
 
     } catch (error) {
         console.error("Error retrieving lessons:", error);
