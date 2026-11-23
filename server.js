@@ -69,11 +69,24 @@ app.get("/lessons", async function (request, response) {
 
         console.log("Lessons retrieved:", lessons.length);
         response.status(200).json(lessons);
+        response.send("Lessons retrieved successfully: " + lessons);
 
     } catch (error) {
         console.error("Error retrieving lessons:", error);
         response.status(500).json({
             error: "Failed to retrieve lessons"
+        });
+    }
+});
+
+app._router.stack.forEach(function (middleware) {
+    if (middleware.route) {
+        console.log("Route: " + middleware.route.path);
+    } else if (middleware.name === "router") {
+        middleware.handle.stack.forEach(function (handler) {
+            if (handler.route) {
+                console.log("Route: " + handler.route.path);
+            }
         });
     }
 });
@@ -104,7 +117,7 @@ app.post("/order", async function (request, response) {
         }
 
         const lessonsOrdered = order.lessonIDs.map(function (entry) {
-            return [entry.lessonName, entry.quantity];
+            return [entry.lessonID, entry.lessonName, entry.quantity];
         });
         console.log("Lessons ordered:", JSON.stringify(lessonsOrdered));
 
