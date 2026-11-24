@@ -26,10 +26,10 @@ app.get("/", function (request, response) {
     response.send("Welcome to the CourseApp backend server!");
 });
 
-// Serve lesson images from the frontend images folder
+// __dirname is the folder server.js is in; path.join builds the path correctly on any OS
+// a request to /images/tennis.png serves images/tennis.png; if it is missing, the request falls through to the 404 below
 app.use("/images", express.static(path.join(__dirname, "images")));
 
-// Return an error if the requested image does not exist
 app.use("/images", function (request, response, next) {
     response.status(404).send("Error: Lesson image not found.");
 });
@@ -37,16 +37,18 @@ app.use("/images", function (request, response, next) {
 app.get("/lessons", async function (request, response) {
     try {
 
-        const search = request.query.search;
+        const search = request.query.search; // query strings like ?search= are in request.query, not request.params
         const pipeline = [];
 
         if (search) {
+            // put a \ before special regex characters so they are searched literally; $& is the matched character, g means every match
             const pattern = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-            pipeline.push({
+            pipeline.push({ // add a filter stage
                 $match: {
-                    $or: [
-                        { topic: { $regex: pattern, $options: "i" } },
+                    $or: [ // a lesson matches if any one of these four conditions is true
+                        { topic: { $regex: pattern, $options: "i" } }, // "i" makes the match case-insensitive
                         { location: { $regex: pattern, $options: "i" } },
+                        // $regex only works on strings, so $expr + $toString turn price/spaces into text first
                         { $expr: { $regexMatch: { input: { $toString: "$price" }, regex: pattern, options: "i" } } },
                         { $expr: { $regexMatch: { input: { $toString: "$spaces" }, regex: pattern, options: "i" } } }
                     ]
@@ -55,23 +57,23 @@ app.get("/lessons", async function (request, response) {
         }
 
         pipeline.push({
-            $lookup: {
-                from: "teachers",
-                let: { lessonTopic: "$topic" },
+            $lookup: { // join each lesson with matching teachers
+                from: "teachers", // look in the teachers collection
+                let: { lessonTopic: "$topic" }, // store this lesson's topic; $ is a field, $$ is a variable
                 pipeline: [
                     {
                         $match: {
                             $expr: {
-                                $in: ["$$lessonTopic", "$lessons"]
+                                $in: ["$$lessonTopic", "$lessons"] // keep teachers whose lessons array contains this topic
                             }
                         }
                     }
                 ],
-                as: "teachers"
+                as: "teachers" // put the matching teachers into a teachers array on each lesson
             }
         });
 
-        const lessons = await db.collection("lessons").aggregate(pipeline).toArray();
+        const lessons = await db.collection("lessons").aggregate(pipeline).toArray(); // run the stages in order, then collect the results
 
         console.log("Lessons retrieved:", lessons.length);
         response.status(200).json(lessons);
@@ -96,13 +98,14 @@ app.post("/order", async function (request, response) {
         console.log("Phone: " + order.phone);
         console.log("Address: " + order.address);
 
+        // .every is true only if every entry passes all of these checks
         const validLessons = order.lessonIDs.every(entry =>
-            entry &&
-            ObjectId.isValid(entry.lessonID) &&
-            typeof entry.lessonName === "string" &&
-            entry.lessonName.trim() !== "" &&
-            Number.isInteger(entry.quantity) &&
-            entry.quantity > 0
+            entry && // the entry isn't null or empty
+            ObjectId.isValid(entry.lessonID) && // the id is a valid Mongo id format
+            typeof entry.lessonName === "string" && // lessonName is text
+            entry.lessonName.trim() !== "" && // and not just blank
+            Number.isInteger(entry.quantity) && // quantity is a whole number
+            entry.quantity > 0 // of at least 1
         );
 
         if (!validLessons) {
@@ -136,7 +139,7 @@ app.post("/order", async function (request, response) {
 
 app.put("/lessons/:id", async function (request, response) {
     try {
-        const rawId = request.params.id;
+        const rawId = request.params.id; // :id from the route path /lessons/:id
 
         if (!ObjectId.isValid(rawId)) {
             return response.status(400).json({ error: "Invalid lesson ID" });
@@ -201,15 +204,15 @@ app.post("/users", async function (request, response) {
 
 app.get("/users/:email/checkout", async function (request, response) {
     try {
-        const email = request.params.email;
+        const email = request.params.email; // :email from the route path (e.g. /users/:email)
         if (!email) {
             return response.status(400).json({ error: "Invalid email" });
         }
 
         const usersCollection = db.collection("users");
         const user = await usersCollection.findOne(
-            { email: email },
-            { projection: { _id: 0, name: 1, phone: 1 } }
+            { email: email }, // find the first user whose email matches
+            { projection: { _id: 0, name: 1, phone: 1 } } // 1 includes a field, 0 hides it; _id is included by default unless excluded
         );
         if (!user) {
             return response.status(404).json({ error: "User not found" });
@@ -229,7 +232,7 @@ app.get("/users/:email/checkout", async function (request, response) {
 
 app.get("/users/:email", async function (request, response) {
     try {
-        const email = request.params.email;
+        const email = request.params.email; // :email from the route path (e.g. /users/:email)
         if (!email) {
             return response.status(400).json({ error: "Invalid email" });
         }
