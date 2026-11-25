@@ -38,11 +38,13 @@ app.get("/lessons", async function (request, response) {
     try {
 
         const search = request.query.search; // query strings like ?search= are in request.query, not request.params
+        // takes the search string and builds a pipeline of stages to filter and join lessons with teachers based on the user's search input; if no search is provided, the pipeline will just join lessons with teachers without filtering
         const pipeline = [];
 
         if (search) {
-            // put a \ before special regex characters so they are searched literally; $& is the matched character, g means every match
-            const pattern = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            // a \ character allows for special regex characters to be searched literally;
+            //  $& is the matched character, g means every match
+            const pattern = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // this regex means "any of these characters" and the g means "every match"
             pipeline.push({ // add a filter stage
                 $match: {
                     $or: [ // a lesson matches if any one of these four conditions is true
@@ -60,11 +62,11 @@ app.get("/lessons", async function (request, response) {
             $lookup: { // join each lesson with matching teachers
                 from: "teachers", // look in the teachers collection
                 let: { lessonTopic: "$topic" }, // store this lesson's topic; $ is a field, $$ is a variable
-                pipeline: [
+                pipeline: [ // this runs for each lesson, and can use the lesson's topic stored in $$lessonTopic/lessonTopic
                     {
-                        $match: {
+                        $match: { // this stage filters the teachers collection to only those whose lessons array contains this lesson's topic
                             $expr: {
-                                $in: ["$$lessonTopic", "$lessons"] // keep teachers whose lessons array contains this topic
+                                $in: ["$$lessonTopic", "$lessons"] // only keep teachers whose lessons array contains this topic
                             }
                         }
                     }
